@@ -107,6 +107,39 @@ namespace S3Project.Controllers
            
         }
 
+        [HttpPut("upload4")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public void Upload4(string bucketName, IFormFile file, string filePath)
+        {
+         
+            filePath = filePath + "\\" + file.FileName;
+
+            // Specify how long the signed URL will be valid in hours.
+            double timeoutDuration = 12;
+
+            // If the AWS Region defined for your default user is different
+            // from the Region where your Amazon S3 bucket is located,
+            // pass the Region name to the Amazon S3 client object's constructor.
+            // For example: RegionEndpoint.USWest2.
+            IAmazonS3 client = new AmazonS3Client();
+
+            var url = amazonS3Storage.GeneratePresignedURL(bucketName, file.FileName, timeoutDuration);
+            var success = amazonS3Storage.UploadObject(filePath, url);
+
+            if (success)
+            {
+                Console.WriteLine("Upload succeeded.");
+            }
+            else
+            {
+                Console.WriteLine("Upload failed.");
+            }
+
+
+        }
+
 
 
         [HttpGet("download/{s3Key}")]

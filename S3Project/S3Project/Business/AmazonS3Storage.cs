@@ -2,6 +2,7 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 
 namespace S3Project.Business;
 
@@ -89,22 +90,22 @@ public class AmazonS3Storage
         _logging.LogInformation($"Deleted {deleteResponse.DeletedObjects.Count} objects");
     }
 
-    public async Task<string> SaveFileAsync(byte[] uploadFileStream, string container, string fileName)
+    public async Task<string> SaveFileAsync(byte[] uploadFileStream, string bucketName, string fileName)
     {
         Stream fileStream = new MemoryStream(uploadFileStream);
 
         PutObjectRequest request = new PutObjectRequest
         {
-            BucketName = container,
+            BucketName = bucketName,
             Key = fileName,
             InputStream = fileStream
         };
 
         PutObjectResponse response = await _client.PutObjectAsync(request);
 
-        _logging.LogInformation($"File {fileName} uploaded to S3 bucket {container}");
+        _logging.LogInformation($"File {fileName} uploaded to S3 bucket {bucketName}");
 
-        string fileUri = GetFileUri(container, fileName);
+        string fileUri = GetFileUri(bucketName, fileName);
 
         return fileUri;
     }
@@ -112,5 +113,48 @@ public class AmazonS3Storage
     private string GetFileUri(string container, string filePath)
     {
         return $"s3://{container}/{filePath}";
+    }
+
+    public string GeneratePresignedURL(string bucketName, string objectKey, double duration)
+    {
+        string urlString = string.Empty;
+        try
+        {
+            var request = new GetPreSignedUrlRequest()
+            {
+                BucketName = bucketName,
+                Key = objectKey,
+                Verb = HttpVerb.PUT,
+                Expires = DateTime.UtcNow.AddHours(duration),
+            };
+            urlString = _client.GetPreSignedURL(request);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            Console.WriteLine($"Error:'{ex.Message}'");
+        }
+
+        return urlString;
+    }
+
+    public bool UploadObject(string filePath, string url)
+    {
+        HttpWebRequest httpRequest = WebRequest.Create(url) as HttpWebRequest;
+        httpRequest.Method = "PUT";
+        using (Stream dataStream = httpRequest.GetRequestStream())
+        {
+            var buffer = new byte[8000];
+            using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            {
+                int bytesRead = 0;
+                while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    dataStream.Write(buffer, 0, bytesRead);
+                }
+            }
+        }
+
+        HttpWebResponse response = httpRequest.GetResponse() as HttpWebResponse;
+        return response.StatusCode == HttpStatusCode.OK;
     }
 }
